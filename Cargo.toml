@@ -1,0 +1,26 @@
+[package]
+name = "bevy_2048_p"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { version = "0.15.2" }
+bevy_prototype_lyon = "0.13.0"
+rand = { version = "0.9" }
+rand_chacha = "0.9"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "s"
+strip = "debuginfo"
