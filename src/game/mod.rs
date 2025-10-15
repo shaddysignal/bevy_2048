@@ -1,23 +1,27 @@
 mod components;
+pub mod effects;
 mod sprites;
 
 use crate::game::components::{
     Block, Board, BoardStateResource, Collider, CollisionMessage, Direction, DirectionMessage,
-    Position, QueuedMove, QueuedMoveMessage, RotateBy, Value,
+    Position, QueuedMerge, QueuedMove, QueuedMoveMessage, RotateBy, Value,
 };
+use crate::game::effects::{BloomMaterial, SparksMaterials};
 use crate::game::sprites::sprites_plugin;
 use crate::menu::{despawn_screen, AppState};
 use crate::SharedRand;
 use bevy::app::App;
 use bevy::color::Color;
 use bevy::input::ButtonInput;
+use bevy::math::vec2;
 use bevy::prelude::*;
+use bevy_hanabi::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 use rand::Rng;
 use std::cmp::max;
 
 const SIZE: usize = 4;
-const RECT_SIZE: f32 = 250.0;
+const RECT_SIZE: f32 = 250.;
 
 #[derive(States, Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
 enum GameState {
@@ -52,27 +56,41 @@ pub fn game_plugin(app: &mut App) {
                     .chain()
                     .run_if(in_state(GameState::Process))
                     .in_set(GameSet),
-                queued_movement_system
+                (queued_movement_system, queued_merge_system, queued_system_finished)
                     .run_if(in_state(GameState::Movement))
                     .in_set(GameSet),
-                (produce_new_tile_system, the_end_system) // TODO: produce_new_tile_system fires sometimes twice
-                    .chain()
-                    .run_if(in_state(GameState::Decision))
-                    .in_set(GameSet),
             ),
+        ) // TODO: produce_new_tile_system fires sometimes twice
+        .add_systems(
+            OnEnter(GameState::Decision),
+            (produce_new_tile_system, the_end_system)
+                .chain()
+                .in_set(GameSet),
         )
+        .add_systems(OnEnter(GameState::Wait), process_effect_off)
+        .add_systems(OnExit(GameState::Process), process_effect_on)
+        // TODO: Win/Lose will trigger effects, need to do something about that in OnEnter functions
+        // .add_systems(OnEnter(GameState::Win), enter_win_state)
+        // .add_systems(OnEnter(GameState::Lose), enter_lose_state)
         .add_systems(OnExit(AppState::Game), despawn_screen::<OnGameScreen>);
 }
 
 #[derive(Component)]
 struct OnGameScreen;
 
-fn col_to_x(col: usize) -> f32 {
-    col as f32 * RECT_SIZE - 500.0
+pub fn col_to_x(col: i32) -> f32 {
+    col as f32 * RECT_SIZE - 500.
 }
 
-fn row_to_y(row: usize) -> f32 {
-    -(row as f32) * RECT_SIZE + 375.0
+pub fn row_to_y(row: i32) -> f32 {
+    -(row as f32) * RECT_SIZE + 375.
+}
+
+fn position_to_rect(position: Position) -> Rect {
+    let x = col_to_x(position.0 as i32) - RECT_SIZE / 2.;
+    let y = row_to_y(position.1 as i32) - RECT_SIZE / 2.;
+
+    Rect::new(x, y, x + RECT_SIZE, y + RECT_SIZE)
 }
 
 fn board_setup(
@@ -122,7 +140,7 @@ fn produce_block_bundle(
     (
         Block,
         Transform {
-            translation: Vec3::new(col_to_x(col), row_to_y(row), 1f32),
+            translation: Vec3::new(col_to_x(col as i32), row_to_y(row as i32), 1.),
             ..default()
         },
         Collider,
@@ -132,17 +150,18 @@ fn produce_block_bundle(
     )
 }
 
+#[inline]
 fn acquire_empty_tile(
     shared_rand: &mut SharedRand,
     board: &Board<Entity>,
 ) -> (usize, usize, usize) {
-    let val: usize = shared_rand.random_range(1..3);
+    let big_val: bool = shared_rand.random_ratio(1, 5);
 
     let row: usize = shared_rand.random_range(0..4);
     let col: usize = shared_rand.random_range(0..4);
 
     if board[col + row * 4].is_none() {
-        (col, row, val)
+        (col, row, if big_val { 2 } else { 1 })
     } else {
         acquire_empty_tile(shared_rand, board)
     }
@@ -173,6 +192,18 @@ fn generate_direction_messages(
     }
 }
 
+fn process_effect_on(mut effect_inits_query: Query<&mut EffectInitializers>) {
+    for mut effect in effect_inits_query.iter_mut() {
+        effect.set_active(true);
+    }
+}
+
+fn process_effect_off(mut effect_inits_query: Query<&mut EffectInitializers>) {
+    for mut effect in effect_inits_query.iter_mut() {
+        effect.set_active(false);
+    }
+}
+
 fn process_direction_messages(
     mut board_state_resource: ResMut<BoardStateResource>,
     mut game_state: ResMut<NextState<GameState>>,
@@ -186,7 +217,7 @@ fn process_direction_messages(
 
     // Take first to process, clear others
     let board = &board_state_resource.0;
-    let message = direction_message.read().next().unwrap();
+    let message = direction_message.read().last().unwrap();
     let rotate_value = RotateBy::from_direction(&message.0);
     let mut rotated_board = rotate_board(board, rotate_value);
     let mut merges: Vec<usize> = Vec::new();
@@ -205,8 +236,6 @@ fn process_direction_messages(
             let tile = rotated_board[location];
 
             if tile.is_some() {
-                // TODO: when more then 2 the same - they all merge together. More testing to catch no valid entity for value in movement
-
                 // if there: process and make message for movement
                 let mut to_row = to_merge;
                 let mut merged_tile = None;
@@ -232,9 +261,9 @@ fn process_direction_messages(
                 }
 
                 // restoring index
-                let (original_c, original_r) = rotate_index(c, r, rotate_value.revert());
+                let (original_c, original_r) = rotate_index(c, r, 4, rotate_value.revert());
                 let (original_to_col, original_to_row) =
-                    rotate_index(c, to_row as usize, rotate_value.revert());
+                    rotate_index(c, to_row as usize, 4, rotate_value.revert());
 
                 if (original_c, original_r) != (original_to_col, original_to_row) {
                     queued_move_message.write(QueuedMoveMessage(
@@ -274,6 +303,7 @@ fn produce_new_tile_system(
     let entity = commands.spawn(produce_block_bundle(col, row, val)).id();
 
     board[col + row * 4] = Some(entity);
+    debug!("produced new tile at [{}, {}] with value {}", col, row, val);
 }
 
 fn the_end_system(
@@ -358,25 +388,32 @@ fn extract_value(
 }
 
 fn rotate_board<T: Copy>(board: &Board<T>, rotate_by: RotateBy) -> Board<T> {
-    let mut rotated: Vec<Option<T>> = vec![None; 16];
+    let n = 4;
+    let mut rotated: Vec<Option<T>> = vec![None; n * n];
 
-    for i in 0..4 {
-        for j in 0..4 {
-            let (c, r) = rotate_index(i, j, rotate_by);
-            rotated[c + r * 4] = board[i + j * 4];
+    for i in 0..n {
+        for j in 0..n {
+            let (c, r) = rotate_index(i, j, n, rotate_by);
+            rotated[c + r * n] = board[i + j * n];
         }
     }
 
     Board(rotated)
 }
 
-fn rotate_index(c: usize, r: usize, rotate_by: RotateBy) -> (usize, usize) {
+fn rotate_index(c: usize, r: usize, n: usize, rotate_by: RotateBy) -> (usize, usize) {
     match rotate_by {
         RotateBy::None => (c, r),
-        RotateBy::Left => (r, 3 - c),
-        RotateBy::Right => (3 - r, c),
-        RotateBy::Full => (3 - c, 3 - r),
+        RotateBy::Left => (r, n - 1 - c),
+        RotateBy::Right => (n - 1 - r, c),
+        RotateBy::Full => (n - 1 - c, n - 1 - r),
     }
+}
+
+// TODO: apparently its alright, but I do not believe it. Maybe there is a better way
+enum QueuedCommand {
+    Move(QueuedMove),
+    Merge(QueuedMerge),
 }
 
 fn process_queued_move_messages(
@@ -386,9 +423,15 @@ fn process_queued_move_messages(
     for QueuedMoveMessage(entity, to, in_time, to_merge_with) in queued_move_messages.read() {
         // TODO: Simply hide the occasional error of non existing entity, most likely connected to merge
         if commands.get_entity(*entity).is_ok() {
-            commands
-                .entity(*entity)
-                .insert(QueuedMove(*to, in_time.clone(), *to_merge_with));
+            let queued_command = to_merge_with
+                .map(|to_merge| QueuedCommand::Merge(QueuedMerge(*to, in_time.clone(), to_merge)))
+                .unwrap_or(QueuedCommand::Move(QueuedMove(*to, in_time.clone())));
+
+            let mut entity_commands = commands.entity(*entity);
+            match queued_command {
+                QueuedCommand::Move(c) => entity_commands.insert(c),
+                QueuedCommand::Merge(c) => entity_commands.insert(c),
+            };
         } else {
             error!(
                 "Entity({}) was deleted before processing message, movement to {:?}",
@@ -398,16 +441,28 @@ fn process_queued_move_messages(
     }
 }
 
+#[derive(Component)]
+struct EffectMarker;
+
+fn queued_system_finished(
+    move_block_query: Query<Entity, With<QueuedMove>>,
+    merge_block_query: Query<Entity, With<QueuedMerge>>,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
+    if move_block_query.is_empty() && merge_block_query.is_empty() {
+        game_state.set(GameState::Decision);
+    }
+}
+
 fn queued_movement_system(
     time: Res<Time>,
     mut commands: Commands,
-    mut game_state: ResMut<NextState<GameState>>,
-    mut block_query: Query<(Entity, &Position, &Value, &mut Transform, &mut QueuedMove)>,
+    mut move_block_query: Query<(Entity, &mut Transform, &mut QueuedMove)>,
 ) {
-    for (entity, _position, value, mut transform, mut queued_move) in block_query.iter_mut() {
-        let QueuedMove(to, timer, to_merge_with) = queued_move.as_mut();
+    for (entity, mut transform, mut queued_move) in move_block_query.iter_mut() {
+        let QueuedMove(to, timer) = queued_move.as_mut();
 
-        let to_vec = Vec2::new(col_to_x(to.0), row_to_y(to.1));
+        let to_vec = vec2(col_to_x(to.0 as i32), row_to_y(to.1 as i32));
 
         timer.tick(time.delta());
         if timer.is_finished() {
@@ -415,22 +470,91 @@ fn queued_movement_system(
             transform.translation.y = to_vec.y;
 
             commands.entity(entity).remove::<QueuedMove>();
-
-            if let Some(merge_entity) = to_merge_with {
-                commands.entity(*merge_entity).despawn();
-                commands.entity(entity).insert(Value(value.0 + 1));
-            }
         } else {
-            let path = to_vec - Vec2::new(transform.translation.x, transform.translation.y);
+            let path = to_vec - vec2(transform.translation.x, transform.translation.y);
             let path = path * timer.fraction();
 
             transform.translation.x += path.x;
             transform.translation.y += path.y;
         }
     }
+}
 
-    if block_query.is_empty() {
-        game_state.set(GameState::Decision);
+fn queued_merge_system(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<SparksMaterials>>,
+    mut merge_block_query: Query<(Entity, &Value, &mut Transform, &mut QueuedMerge)>,
+    mut effect_query: Query<(&Parent, &mut Transform), With<EffectMarker>>,
+    block_query: Query<&Position, With<Block>>,
+) {
+    for (entity, value, mut transform, mut queued_merge) in merge_block_query.iter_mut() {
+        let QueuedMerge(to, timer, merge_entity) = queued_merge.as_mut();
+
+        let to_vec = vec2(col_to_x(to.0 as i32), row_to_y(to.1 as i32));
+
+        timer.tick(time.delta());
+        if timer.finished() {
+            transform.translation.x = to_vec.x;
+            transform.translation.y = to_vec.y;
+
+            commands.entity(entity)
+                .remove::<QueuedMerge>();
+            effect_query.get()
+            for child in children.unwrap().iter() {
+                commands.entity(*child).despawn_recursive();
+            }
+
+            commands.entity(*merge_entity).despawn_recursive();
+            commands.entity(entity).insert(Value(value.0 + 1));
+        } else {
+            let path = to_vec - vec2(transform.translation.x, transform.translation.y);
+            let path = path * timer.fraction();
+
+            transform.translation.x += path.x;
+            transform.translation.y += path.y;
+
+            // TODO: I know that at merge request, move that so calculation happens only once
+            let merge_position = block_query
+                .get(*merge_entity)
+                .expect("Block to merge should exist");
+            let bounds = Rect::from_corners(
+                Vec2::new(transform.translation.x - RECT_SIZE / 2., transform.translation.y - RECT_SIZE / 2.),
+                Vec2::new(transform.translation.x + RECT_SIZE / 2., transform.translation.y + RECT_SIZE / 2.),
+            );
+            let merge_bounds = position_to_rect(*merge_position);
+
+            let bound = match path {
+                p if p.x.abs() < 1e-5 && p.y < 0. => (bounds.max, vec2(bounds.min.x, bounds.max.y)),
+                p if p.x.abs() < 1e-5 && p.y > 0. => (bounds.min, vec2(bounds.max.x, bounds.min.y)),
+                p if p.y.abs() < 1e-5 && p.x < 0. => (bounds.min, vec2(bounds.min.x, bounds.max.y)),
+                p if p.y.abs() < 1e-5 && p.x > 0. => (bounds.max, vec2(bounds.max.x, bounds.min.y)),
+                p => { info!("error path {:?}", p); (Vec2::splat(0.), Vec2::splat(0.)) },
+            };
+
+            if merge_bounds.contains(vec2(transform.translation.x, transform.translation.y)) && children.is_none() {
+                let mut merge_commands = commands.entity(*merge_entity);
+
+                merge_commands.with_child((
+                    Mesh2d(meshes.add(Rectangle::from_size(Vec2::new(
+                        RECT_SIZE * 1.25,
+                        RECT_SIZE * 1.25,
+                    )))),
+                    MeshMaterial2d(materials.add(SparksMaterials {
+                        color: LinearRgba::BLUE,
+                        left: bound.0,
+                        right: bound.1,
+                    })),
+                    Transform::default().with_translation(Vec3::new(
+                        0.,
+                        0.,
+                        5.0,
+                    )),
+                    EffectMarker
+                ));
+            }
+        }
     }
 }
 
@@ -438,8 +562,8 @@ fn game_ui_setup(mut commands: Commands) {
     commands
         .spawn((
             Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
+                width: Val::Percent(100.),
+                height: Val::Percent(100.),
                 align_items: AlignItems::Stretch,
                 justify_content: JustifyContent::Start,
                 ..default()
@@ -465,9 +589,9 @@ fn game_ui_setup(mut commands: Commands) {
                     p.spawn((
                         Button,
                         Node {
-                            width: Val::Px(75.0),
-                            height: Val::Px(65.0),
-                            margin: UiRect::all(Val::Px(20.0)),
+                            width: Val::Px(75.),
+                            height: Val::Px(65.),
+                            margin: UiRect::all(Val::Px(20.)),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             ..default()
@@ -479,7 +603,7 @@ fn game_ui_setup(mut commands: Commands) {
                         parent.spawn((
                             Text::new("X"),
                             TextFont {
-                                font_size: 33.0,
+                                font_size: 33.,
                                 ..default()
                             },
                             TextColor(Color::srgb(0.9, 0.9, 0.9)),
@@ -540,9 +664,9 @@ mod tests {
     #[test]
     fn rotate_index_test() {
         let rotate_value = RotateBy::Left;
-        assert_eq!((0, 3), rotate_index(0, 0, rotate_value));
-        assert_eq!((0, 0), rotate_index(0, 3, rotate_value.revert()));
+        assert_eq!((0, 3), rotate_index(0, 0, 4, rotate_value));
+        assert_eq!((0, 0), rotate_index(0, 3, 4, rotate_value.revert()));
 
-        assert_eq!((1, 1), rotate_index(1, 2, RotateBy::Right));
+        assert_eq!((1, 1), rotate_index(1, 2, 4, RotateBy::Right));
     }
 }

@@ -192,7 +192,7 @@ fn main_menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                             MenuButtonAction::Play,
                         ))
                         .with_children(|parent| {
-                            let icon = asset_server.load("textures/Game Icons/right.png");
+                            let icon = asset_server.load("textures/right.png");
                             parent.spawn((ImageNode::new(icon), button_icon_node.clone()));
                             parent.spawn((
                                 Text::new("New Game"),
@@ -208,7 +208,7 @@ fn main_menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                             MenuButtonAction::Settings,
                         ))
                         .with_children(|parent| {
-                            let icon = asset_server.load("textures/Game Icons/wrench.png");
+                            let icon = asset_server.load("textures/wrench.png");
                             parent.spawn((ImageNode::new(icon), button_icon_node.clone()));
                             parent.spawn((
                                 Text::new("Settings"),
@@ -216,6 +216,7 @@ fn main_menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                                 TextColor(TEXT_COLOR),
                             ));
                         });
+                    #[cfg(not(target_arch = "wasm32"))]
                     parent
                         .spawn((
                             Button,
@@ -224,7 +225,7 @@ fn main_menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                             MenuButtonAction::Quit,
                         ))
                         .with_children(|parent| {
-                            let icon = asset_server.load("textures/Game Icons/exitRight.png");
+                            let icon = asset_server.load("textures/exitRight.png");
                             parent.spawn((ImageNode::new(icon), button_icon_node));
                             parent.spawn((
                                 Text::new("Quit"),

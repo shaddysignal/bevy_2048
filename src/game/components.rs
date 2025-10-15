@@ -50,12 +50,18 @@ fn on_value_insert(mut world: DeferredWorld, HookContext { entity, .. }: HookCon
 /// Move to be processed
 /// 1. move to
 /// 1. in time
-/// 1. merge at end
 #[derive(Component)]
-pub struct QueuedMove(pub Position, pub Timer, pub Option<Entity>);
+pub struct QueuedMove(pub Position, pub Timer);
+
+/// Merge to be processed
+/// 1. move to
+/// 1. in time
+/// 1. merge to
+#[derive(Component)]
+pub struct QueuedMerge(pub Position, pub Timer, pub Entity);
 
 /// Direction of board shuffle
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub enum Direction {
     Left,
     Right,

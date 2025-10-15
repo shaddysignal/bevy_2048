@@ -8,16 +8,11 @@ use bevy::winit::WinitWindows;
 
 const TEXT_COLOR: Color = Color::srgb(0.9, 0.9, 0.9);
 
-pub struct MenuPlugin;
-
-impl Plugin for MenuPlugin {
-    fn build(&self, app: &mut App) {
-        app
-            .insert_resource(Volume(7))
-            .init_state::<AppState>()
-            .add_systems(Startup, setup)
-            .add_plugins((splash::splash_plugin, menu_mod::menu_plugin));
-    }
+pub fn main_menu_plugin(app: &mut App) {
+    app
+        .insert_resource(Volume(7))
+        .init_state::<AppState>()
+        .add_plugins((splash::splash_plugin, menu_mod::menu_plugin));
 }
 
 #[derive(Clone, Copy, Default, Eq, PartialEq, Hash, Debug, States)]
@@ -39,10 +34,10 @@ fn setup(mut commands: Commands) { //winit_windows: NonSend<WinitWindows>, windo
     //     .and_then(|entity| winit_windows.get_window(entity))
     //     .and_then(|winit_window| winit_window.current_monitor())
     //     .expect("Couldn't get monitor");
-    // 
+    //
     // let scale = height / monitor.size().height as f32;
     let scale = 1.0;
-    
+
     commands.spawn((
         Camera2d,
         Camera {
@@ -59,12 +54,6 @@ fn setup(mut commands: Commands) { //winit_windows: NonSend<WinitWindows>, windo
             ..OrthographicProjection::default_2d()
         }),
         Msaa::Sample4,
-        // OrthographicProjection {
-        //     scaling_mode: ScalingMode::AutoMax { max_width: width, max_height: height },
-        //     scale,
-        //     ..OrthographicProjection::default_2d()
-        // },
-        // Msaa::Sample4
     ));
 }
 
