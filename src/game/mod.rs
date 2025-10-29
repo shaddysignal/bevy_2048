@@ -2,15 +2,14 @@ mod components;
 mod sprites;
 
 use crate::game::components::{
-    Block, Board, BoardStateResource, Collider, CollisionEvent, Direction, DirectionEvent,
-    Position, QueuedMove, QueuedMoveEvent, RotateBy, Value,
+    Block, Board, BoardStateResource, Collider, CollisionMessage, Direction, DirectionMessage,
+    Position, QueuedMove, QueuedMoveMessage, RotateBy, Value,
 };
-use crate::game::sprites::{sprites_plugin};
+use crate::game::sprites::sprites_plugin;
 use crate::menu::{despawn_screen, AppState};
 use crate::SharedRand;
 use bevy::app::App;
 use bevy::color::Color;
-use bevy::hierarchy::{BuildChildren, ChildBuild};
 use bevy::input::ButtonInput;
 use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
@@ -37,26 +36,26 @@ struct GameSet;
 pub fn game_plugin(app: &mut App) {
     app.add_plugins((sprites_plugin, ShapePlugin))
         .insert_resource(BoardStateResource(Board::<Entity>(vec![None; SIZE * SIZE])))
-        .add_event::<CollisionEvent>()
-        .add_event::<DirectionEvent>()
-        .add_event::<QueuedMoveEvent>()
+        .add_message::<CollisionMessage>()
+        .add_message::<DirectionMessage>()
+        .add_message::<QueuedMoveMessage>()
         .init_state::<GameState>()
         .add_systems(OnEnter(AppState::Game), (board_setup, game_ui_setup))
         .configure_sets(FixedUpdate, GameSet.run_if(in_state(AppState::Game)))
         .add_systems(
             FixedUpdate,
             (
-                generate_direction_events
+                generate_direction_messages
                     .run_if(in_state(GameState::Wait))
                     .in_set(GameSet),
-                (process_direction_events, process_queued_move_events)
+                (process_direction_messages, process_queued_move_messages)
                     .chain()
                     .run_if(in_state(GameState::Process))
                     .in_set(GameSet),
                 queued_movement_system
                     .run_if(in_state(GameState::Movement))
                     .in_set(GameSet),
-                (produce_new_tile_system, the_end_system)
+                (produce_new_tile_system, the_end_system) // TODO: produce_new_tile_system fires sometimes twice
                     .chain()
                     .run_if(in_state(GameState::Decision))
                     .in_set(GameSet),
@@ -91,13 +90,11 @@ fn board_setup(
             };
 
             commands.spawn((
-                ShapeBundle {
-                    path: GeometryBuilder::build_as(&rect),
-                    transform: Transform::from_xyz(col_to_x(i), row_to_y(j), 0.0),
-                    ..default()
-                },
-                Stroke::new(Color::WHITE, 10.0),
-                Fill::color(Color::srgba(0f32, 0f32, 0f32, 0.5)),
+                ShapeBuilder::with(&rect)
+                    .fill(Color::srgba(0f32, 0f32, 0f32, 0.5))
+                    .stroke((Color::WHITE, 10.0))
+                    .build(),
+                Transform::from_xyz(col_to_x(i), row_to_y(j), 0.0),
                 OnGameScreen,
             ));
         }
@@ -109,12 +106,12 @@ fn board_setup(
     let (col1, row1, val1) = acquire_empty_tile(shared_rand.as_mut(), board);
     let entity1 = commands.spawn(produce_block_bundle(col1, row1, val1)).id();
     board[col1 + row1 * 4] = Some(entity1);
-    debug!("Board at {}x{} filled with {}", col1, row1, val1);
+    trace!("Board at {}x{} filled with {}", col1, row1, val1);
 
     let (col2, row2, val2) = acquire_empty_tile(shared_rand.as_mut(), board);
     let entity2 = commands.spawn(produce_block_bundle(col2, row2, val2)).id();
     board[col2 + row2 * 4] = Some(entity2);
-    debug!("Board at {}x{} filled with {}", col2, row2, val2);
+    trace!("Board at {}x{} filled with {}", col2, row2, val2);
 }
 
 fn produce_block_bundle(
@@ -151,19 +148,19 @@ fn acquire_empty_tile(
     }
 }
 
-fn generate_direction_events(
+fn generate_direction_messages(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut game_state: ResMut<NextState<GameState>>,
-    mut direction_events: EventWriter<DirectionEvent>,
+    mut direction_message: MessageWriter<DirectionMessage>,
 ) {
     if keyboard_input.just_pressed(KeyCode::ArrowLeft) {
-        direction_events.send(DirectionEvent(Direction::Left));
+        direction_message.write(DirectionMessage(Direction::Left));
     } else if keyboard_input.just_pressed(KeyCode::ArrowRight) {
-        direction_events.send(DirectionEvent(Direction::Right));
+        direction_message.write(DirectionMessage(Direction::Right));
     } else if keyboard_input.just_pressed(KeyCode::ArrowDown) {
-        direction_events.send(DirectionEvent(Direction::Down));
+        direction_message.write(DirectionMessage(Direction::Down));
     } else if keyboard_input.just_pressed(KeyCode::ArrowUp) {
-        direction_events.send(DirectionEvent(Direction::Up));
+        direction_message.write(DirectionMessage(Direction::Up));
     }
 
     if keyboard_input.any_just_pressed([
@@ -176,26 +173,26 @@ fn generate_direction_events(
     }
 }
 
-fn process_direction_events(
+fn process_direction_messages(
     mut board_state_resource: ResMut<BoardStateResource>,
     mut game_state: ResMut<NextState<GameState>>,
-    mut direction_events: EventReader<DirectionEvent>,
-    mut queued_move_events: EventWriter<QueuedMoveEvent>,
+    mut direction_message: MessageReader<DirectionMessage>,
+    mut queued_move_message: MessageWriter<QueuedMoveMessage>,
     block_query: Query<&Value, With<Block>>,
 ) {
-    if direction_events.is_empty() {
+    if direction_message.is_empty() {
         return;
     }
 
     // Take first to process, clear others
     let board = &board_state_resource.0;
-    let event = direction_events.read().next().unwrap();
-    let rotate_value = RotateBy::from_direction(&event.0);
+    let message = direction_message.read().next().unwrap();
+    let rotate_value = RotateBy::from_direction(&message.0);
     let mut rotated_board = rotate_board(board, rotate_value);
     let mut merges: Vec<usize> = Vec::new();
 
-    debug!("{}", board);
-    debug!("Rotated {}", rotated_board);
+    trace!("{}", board);
+    trace!("Rotated {}", rotated_board);
 
     // TODO: holy this is so much over typing, probably doing something wrong all together
     for c in 0..4 {
@@ -210,7 +207,7 @@ fn process_direction_events(
             if tile.is_some() {
                 // TODO: when more then 2 the same - they all merge together. More testing to catch no valid entity for value in movement
 
-                // if there: process and make event for movement
+                // if there: process and make message for movement
                 let mut to_row = to_merge;
                 let mut merged_tile = None;
 
@@ -219,7 +216,10 @@ fn process_direction_events(
 
                 rotated_board[location] = None;
 
-                if (0..4).contains(&to_merge) && !merges.contains(&new_location) && current == new_current {
+                if (0..4).contains(&to_merge)
+                    && !merges.contains(&new_location)
+                    && current == new_current
+                {
                     merged_tile = rotated_board[new_location];
                     rotated_board[new_location] = tile;
 
@@ -237,12 +237,12 @@ fn process_direction_events(
                     rotate_index(c, to_row as usize, rotate_value.revert());
 
                 if (original_c, original_r) != (original_to_col, original_to_row) {
-                    queued_move_events.send(QueuedMoveEvent(
+                    queued_move_message.write(QueuedMoveMessage(
                         board[original_c + original_r * 4]
                             .expect("Value in original coords should exist"),
                         Position(original_to_col, original_to_row),
                         Timer::from_seconds(0.5, TimerMode::Once),
-                        merged_tile
+                        merged_tile,
                     ));
                 }
             }
@@ -251,11 +251,11 @@ fn process_direction_events(
 
     let new_board = rotate_board(&rotated_board, rotate_value.revert());
 
-    direction_events.clear();
+    direction_message.clear();
     if new_board.0 != board.0 {
         game_state.set(GameState::Movement);
     } else {
-        debug!("No changes after shuffle");
+        trace!("No changes after shuffle");
         game_state.set(GameState::Wait);
         return;
     }
@@ -379,19 +379,19 @@ fn rotate_index(c: usize, r: usize, rotate_by: RotateBy) -> (usize, usize) {
     }
 }
 
-fn process_queued_move_events(
+fn process_queued_move_messages(
     mut commands: Commands,
-    mut queued_move_events: EventReader<QueuedMoveEvent>,
+    mut queued_move_messages: MessageReader<QueuedMoveMessage>,
 ) {
-    for QueuedMoveEvent(entity, to, in_time, to_merge_with) in queued_move_events.read() {
+    for QueuedMoveMessage(entity, to, in_time, to_merge_with) in queued_move_messages.read() {
         // TODO: Simply hide the occasional error of non existing entity, most likely connected to merge
-        if commands.get_entity(*entity).is_some() {
+        if commands.get_entity(*entity).is_ok() {
             commands
                 .entity(*entity)
                 .insert(QueuedMove(*to, in_time.clone(), *to_merge_with));
         } else {
             error!(
-                "Entity({}) was deleted before processing event, movement to {:?}",
+                "Entity({}) was deleted before processing message, movement to {:?}",
                 entity, to
             );
         }
@@ -410,7 +410,7 @@ fn queued_movement_system(
         let to_vec = Vec2::new(col_to_x(to.0), row_to_y(to.1));
 
         timer.tick(time.delta());
-        if timer.finished() {
+        if timer.is_finished() {
             transform.translation.x = to_vec.x;
             transform.translation.y = to_vec.y;
 

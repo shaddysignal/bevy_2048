@@ -377,7 +377,7 @@ fn menu_action(
         (&Interaction, &MenuButtonAction),
         (Changed<Interaction>, With<Button>),
     >,
-    mut app_exit_events: EventWriter<AppExit>,
+    mut app_exit_events: MessageWriter<AppExit>,
     mut menu_state: ResMut<NextState<MenuState>>,
     mut game_state: ResMut<NextState<AppState>>,
 ) {
@@ -385,7 +385,7 @@ fn menu_action(
         if *interaction == Interaction::Pressed {
             match menu_button_action {
                 MenuButtonAction::Quit => {
-                    app_exit_events.send(AppExit::Success);
+                    app_exit_events.write(AppExit::Success);
                 }
                 MenuButtonAction::Play => {
                     game_state.set(AppState::Game);
