@@ -7,7 +7,9 @@ permissions:
 
 on:
   push:
-    branches: [ main, wf-pages ]
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build:
