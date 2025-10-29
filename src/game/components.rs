@@ -1,8 +1,8 @@
-use std::fmt::{Display, Formatter};
-use bevy::ecs::component::{ComponentId};
+use crate::game::sprites::BoardSprites;
+use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use bevy::prelude::*;
-use crate::game::sprites::BoardSprites;
+use std::fmt::{Display, Formatter};
 
 /// Resource to hold current and previous boards
 #[derive(Resource)]
@@ -39,7 +39,7 @@ pub struct Position(pub usize, pub usize);
 #[component(on_insert = on_value_insert)]
 pub struct Value(pub usize);
 
-fn on_value_insert(mut world: DeferredWorld, entity: Entity, _component_id: ComponentId) {
+fn on_value_insert(mut world: DeferredWorld, HookContext { entity, .. }: HookContext) {
     let new_value = world.get::<Value>(entity).expect("Value exists on block");
     let board_sprites = world.get_resource::<BoardSprites>().expect("BoardSprites available");
     
@@ -90,18 +90,18 @@ impl RotateBy {
     }
 }
 
-/// Event for movement to new position in global coordinates
+/// Message for movement to new position in global coordinates
 /// 1. entity to move
 /// 1. position component to move to
 /// 1. time to move to position
 /// 1. block merge happens
-#[derive(Event)]
-pub struct QueuedMoveEvent(pub Entity, pub Position, pub Timer, pub Option<Entity>);
+#[derive(Message)]
+pub struct QueuedMoveMessage(pub Entity, pub Position, pub Timer, pub Option<Entity>);
 
-/// Event to signal collision
-#[derive(Event, Default)]
-pub struct CollisionEvent;
+/// Message to signal collision
+#[derive(Message, Default)]
+pub struct CollisionMessage;
 
-/// Event for board shuffle
-#[derive(Event, Default)]
-pub struct DirectionEvent(pub Direction);
+/// Message for board shuffle
+#[derive(Message, Default)]
+pub struct DirectionMessage(pub Direction);

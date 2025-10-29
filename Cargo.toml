@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.15.2" }
-bevy_prototype_lyon = "0.13.0"
+bevy = { version = "0.17" }
+bevy_prototype_lyon = "0.15"
 rand = { version = "0.9" }
 rand_chacha = "0.9"
 getrandom = { version = "0.3", features = ["wasm_js"] }

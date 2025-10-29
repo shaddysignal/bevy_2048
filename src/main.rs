@@ -15,6 +15,7 @@ fn main() {
         level: bevy::log::Level::DEBUG,
         filter: "info,wgpu_core=warn,wgpu_hal=warn,naga=warn,bevy_2048_p=debug".into(),
         custom_layer: |_| None,
+        fmt_layer: |_| None,
     };
 
     // this code is compiled only if debug assertions are disabled (release mode)
