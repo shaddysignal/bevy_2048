@@ -1,6 +1,7 @@
 name: Build and deploy Pages
 
 permissions:
+  id-token: write
   contents: read
   pages: write
 
