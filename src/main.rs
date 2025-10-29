@@ -24,6 +24,7 @@ fn main() {
         level: bevy::log::Level::INFO,
         filter: "info,wgpu_core=warn,wgpu_hal=warn".into(),
         custom_layer: |_| None,
+        fmt_layer: |_| None,
     };
 
     App::new()
