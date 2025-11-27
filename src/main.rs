@@ -2,6 +2,7 @@ mod animation_sprite;
 mod game;
 mod menu;
 
+use bevy::asset::AssetMetaCheck;
 use bevy::camera::Viewport;
 use bevy::camera::ScalingMode;
 use crate::game::effects;
@@ -36,7 +37,11 @@ fn main() {
 
     let default_plugins = DefaultPlugins
         .set(log_plugin)
-        .set(ImagePlugin::default_nearest());
+        .set(ImagePlugin::default_nearest())
+        .set(AssetPlugin {
+            meta_check: AssetMetaCheck::Never,
+            ..default()
+        });
 
     App::new()
         .add_plugins((
