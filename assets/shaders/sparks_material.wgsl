@@ -5,7 +5,7 @@
 @group(2) @binding(0) var<uniform> color: vec4<f32>;
 @group(2) @binding(1) var<uniform> left: vec2<f32>;
 @group(2) @binding(2) var<uniform> right: vec2<f32>;
-@group(2) @binding(5) var<uniform> mesh_size: vec2<f32>;
+@group(2) @binding(5) var<uniform> mesh_size: vec4<f32>; // Must be vec4 to align to 16 bit (wasm)
 
 const blue_shift: vec4<f32> = vec4<f32>(1., 1., 1., 0.);
 
@@ -13,7 +13,7 @@ const blue_shift: vec4<f32> = vec4<f32>(1., 1., 1., 0.);
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     // Convert UV coordinates to a coordinate system that matches your original logic
     // This transforms from [0,1] to [-mesh_size/2, mesh_size/2]
-    let uv_coords = (in.uv - vec2<f32>(0.5, 0.5)) * mesh_size;
+    let uv_coords = (in.uv - vec2<f32>(0.5, 0.5)) * mesh_size.xy;
 
     var c0: f32 = 0.;
     var c1: f32 = 0.;

@@ -27,7 +27,7 @@ pub fn merge_effect_system(
                     color: LinearRgba::BLUE,
                     left: merge_effect_message.line.0,
                     right: merge_effect_message.line.1,
-                    mesh_size: vec2(mesh_size, mesh_size),
+                    mesh_size: vec4(mesh_size, mesh_size, 0., 0.),
                 })),
                 Transform::from_xyz(0., 0., 11.),
                 EffectMarker,

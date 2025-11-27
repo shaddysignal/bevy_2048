@@ -16,7 +16,7 @@ pub struct SparksMaterial {
     #[uniform(2)]
     pub(crate) right: Vec2,
     #[uniform(5)]
-    pub(crate) mesh_size: Vec2,
+    pub(crate) mesh_size: Vec4,
 }
 
 impl Material2d for SparksMaterial {
