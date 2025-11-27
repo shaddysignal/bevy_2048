@@ -12,10 +12,10 @@ pub struct SparksMaterial {
     #[uniform(0)]
     pub(crate) color: LinearRgba,
     #[uniform(1)]
-    pub(crate) left: Vec2,
+    pub(crate) left: Vec4,
     #[uniform(2)]
-    pub(crate) right: Vec2,
-    #[uniform(5)]
+    pub(crate) right: Vec4,
+    #[uniform(3)]
     pub(crate) mesh_size: Vec4,
 }
 

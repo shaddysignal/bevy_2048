@@ -3,9 +3,9 @@
 #import bevy_sprite::mesh2d_functions::mesh2d_position_world_to_clip
 
 @group(2) @binding(0) var<uniform> color: vec4<f32>;
-@group(2) @binding(1) var<uniform> left: vec2<f32>;
-@group(2) @binding(2) var<uniform> right: vec2<f32>;
-@group(2) @binding(5) var<uniform> mesh_size: vec4<f32>; // Must be vec4 to align to 16 bit (wasm)
+@group(2) @binding(1) var<uniform> left: vec4<f32>; // Must be vec4 to align to 16 bit (wasm)
+@group(2) @binding(2) var<uniform> right: vec4<f32>; // Must be vec4 to align to 16 bit (wasm)
+@group(2) @binding(3) var<uniform> mesh_size: vec4<f32>; // Must be vec4 to align to 16 bit (wasm)
 
 const blue_shift: vec4<f32> = vec4<f32>(1., 1., 1., 0.);
 
@@ -25,12 +25,12 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         v = vec2<f32>(sqrt(-2. * log(1. - v.x)), 6.283185 * v.y);
         v = 50. * v.x * vec2<f32>(cos(v.y), sin(v.y));
 
-        let bound: vec2<f32> = (right - left);
+        let bound: vec2<f32> = (right.xy - left.xy);
         let bound_d: f32 = length(bound);
 
         // Use UV-based coordinates instead of world_position
-        let point1: vec2<f32> = uv_coords - left;
-        let point2: vec2<f32> = uv_coords - right;
+        let point1: vec2<f32> = uv_coords - left.xy;
+        let point2: vec2<f32> = uv_coords - right.xy;
 
         let d1: f32 = length(point1);
         let d2: f32 = length(point2);
@@ -43,9 +43,9 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
             pos = vec2<f32>(left.x + proj_t * bound.x, left.y + proj_t * bound.y);
         } else {
             if (d2 > d1) {
-                pos = left;
+                pos = left.xy;
             } else {
-                pos = right;
+                pos = right.xy;
             }
         }
 

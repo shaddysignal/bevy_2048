@@ -15,8 +15,8 @@ pub fn merge_effect_system(
 
         if let Some(merge_effect) = merge_effect {
             let Some(material) = materials.get_mut(merge_effect.1) else { panic!("Materials should contain created material") };
-            material.left = merge_effect_message.line.0;
-            material.right = merge_effect_message.line.1;
+            material.left = vec4(merge_effect_message.line.0.x, merge_effect_message.line.0.y, 0., 0.);
+            material.right = vec4(merge_effect_message.line.1.x, merge_effect_message.line.1.y, 0., 0.);
         } else {
             let mut entity_commands = commands.entity(merge_effect_message.entity);
             let mesh_size = RECT_SIZE * 1.25;
@@ -25,8 +25,8 @@ pub fn merge_effect_system(
                 Mesh2d(meshes.add(Rectangle::from_size(Vec2::new(mesh_size, mesh_size)))),
                 MeshMaterial2d(materials.add(SparksMaterial {
                     color: LinearRgba::BLUE,
-                    left: merge_effect_message.line.0,
-                    right: merge_effect_message.line.1,
+                    left: vec4(merge_effect_message.line.0.x, merge_effect_message.line.0.y, 0., 0.),
+                    right: vec4(merge_effect_message.line.1.x, merge_effect_message.line.1.y, 0., 0.),
                     mesh_size: vec4(mesh_size, mesh_size, 0., 0.),
                 })),
                 Transform::from_xyz(0., 0., 11.),
