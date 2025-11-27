@@ -2,17 +2,18 @@ mod animation_sprite;
 mod game;
 mod menu;
 
+use bevy::camera::Viewport;
+use bevy::camera::ScalingMode;
 use crate::game::effects;
-use bevy::core_pipeline::bloom::Bloom;
+use bevy::post_process::bloom::Bloom;
 use bevy::core_pipeline::tonemapping::Tonemapping;
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
-use bevy::render::camera::ScalingMode;
-use bevy::window::PrimaryWindow;
-use bevy::winit::WinitWindows;
-use bevy_hanabi::prelude::*;
+use bevy::render::view::Hdr;
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha8Rng;
+use crate::menu::{AppState, MenuState};
+use crate::menu::menu_mod::MenuButtonAction;
 
 fn main() {
     // this code is compiled only if debug assertions are enabled (debug mode)
@@ -40,7 +41,6 @@ fn main() {
     App::new()
         .add_plugins((
             default_plugins,
-            HanabiPlugin,
             menu::main_menu_plugin,
             game::game_plugin,
             animation_sprite::animate_sprite_plugin,
@@ -48,6 +48,7 @@ fn main() {
         ))
         .add_systems(Startup, camera_setup)
         .insert_resource(SharedRand::default())
+        .add_systems(Update, menu_action)
         .run();
 }
 
@@ -69,56 +70,61 @@ impl Default for SharedRand {
 
 fn camera_setup(
     mut commands: Commands,
-    winit_windows: NonSend<WinitWindows>,
-    window_query: Query<Entity, With<PrimaryWindow>>,
+    window: Single<&Window>,
 ) {
-    let (width, height) = (1920.0, 1080.0);
-    let scale = if cfg!(target_arch = "wasm32") {
-        1.0
-    } else {
-        let monitor = window_query
-            .get_single()
-            .ok()
-            .and_then(|entity| winit_windows.get_window(entity))
-            .and_then(|winit_window| winit_window.current_monitor())
-            .expect("Couldn't get monitor");
-
-        height / monitor.size().height as f32
-    };
+    let window_size = Vec2::new(1920., 1080.);
+    let scale = window_size.y / window.resolution.physical_size().y as f32;
 
     commands.spawn((
         Camera2d,
         Camera {
-            hdr: true,
+            viewport: Some(Viewport {
+                physical_position: UVec2::ZERO,
+                physical_size: window_size.as_uvec2(),
+                ..default()
+            }),
             ..default()
         },
-        OrthographicProjection {
-            scaling_mode: ScalingMode::AutoMax {
-                max_width: width,
-                max_height: height,
-            },
+        Hdr,
+        Projection::from(OrthographicProjection {
+            scaling_mode: ScalingMode::AutoMax { max_width: window_size.x, max_height: window_size.y },
             scale,
             ..OrthographicProjection::default_2d()
-        },
+        }),
         Tonemapping::TonyMcMapface,
         Msaa::Sample4,
         Bloom::default(),
     ));
 }
 
-// #[cfg(target_family = "wasm")]
-// mod wasm_workaround {
-//     extern "C" {
-//         pub(super) fn __wasm_call_ctors();
-//     }
-// }
-// 
-// #[wasm_bindgen(start)]
-// fn start() {
-// 
-//     // fix:
-//     // freestyle::block::_::__ctor::h5e2299a836106c67:: Read a negative address value from the stack. Did we run out of memory?
-//     #[cfg(target_family = "wasm")]
-//     unsafe { wasm_workaround::__wasm_call_ctors()};
-// 
-// }
+fn menu_action(
+    interaction_query: Query<
+        (&Interaction, &MenuButtonAction),
+        (Changed<Interaction>, With<Button>),
+    >,
+    mut app_exit_events: MessageWriter<AppExit>,
+    mut menu_state: ResMut<NextState<MenuState>>,
+    mut game_state: ResMut<NextState<AppState>>,
+) {
+    for (interaction, menu_button_action) in &interaction_query {
+        if *interaction == Interaction::Pressed {
+            match menu_button_action {
+                MenuButtonAction::Quit => {
+                    app_exit_events.write(AppExit::Success);
+                }
+                MenuButtonAction::Play => {
+                    game_state.set(AppState::Game);
+                    menu_state.set(MenuState::Disabled);
+                }
+                MenuButtonAction::Settings => menu_state.set(MenuState::Settings),
+                MenuButtonAction::SettingsSound => {
+                    menu_state.set(MenuState::SettingsSound);
+                }
+                MenuButtonAction::BackToMainMenu => menu_state.set(MenuState::Main),
+                MenuButtonAction::BackToSettings => {
+                    menu_state.set(MenuState::Settings);
+                }
+            }
+        }
+    }
+}
