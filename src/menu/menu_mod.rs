@@ -1,6 +1,6 @@
-use bevy::{app::AppExit, color::palettes::css::CRIMSON, prelude::*};
+use bevy::{color::palettes::css::CRIMSON, prelude::*};
 
-use super::{despawn_screen, AppState, Volume, TEXT_COLOR};
+use super::{despawn_screen, AppState, MenuState, Volume, TEXT_COLOR};
 
 // This plugin manages the menu, with 5 different screens:
 // - a main menu with "New Game", "Settings", "Quit"
@@ -35,18 +35,8 @@ pub fn menu_plugin(app: &mut App) {
         // Common systems to all screens that handles buttons behavior
         .add_systems(
             Update,
-            (menu_action, button_system).run_if(in_state(AppState::Menu)),
+            button_system.run_if(in_state(AppState::Menu)),
         );
-}
-
-// State used for the current menu screen
-#[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
-enum MenuState {
-    Main,
-    Settings,
-    SettingsSound,
-    #[default]
-    Disabled,
 }
 
 // Tag component used to tag entities added on the main menu screen
@@ -192,7 +182,7 @@ fn main_menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                             MenuButtonAction::Play,
                         ))
                         .with_children(|parent| {
-                            let icon = asset_server.load("textures/Game Icons/right.png");
+                            let icon = asset_server.load("textures/right.png");
                             parent.spawn((ImageNode::new(icon), button_icon_node.clone()));
                             parent.spawn((
                                 Text::new("New Game"),
@@ -208,7 +198,7 @@ fn main_menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                             MenuButtonAction::Settings,
                         ))
                         .with_children(|parent| {
-                            let icon = asset_server.load("textures/Game Icons/wrench.png");
+                            let icon = asset_server.load("textures/wrench.png");
                             parent.spawn((ImageNode::new(icon), button_icon_node.clone()));
                             parent.spawn((
                                 Text::new("Settings"),
@@ -216,6 +206,7 @@ fn main_menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                                 TextColor(TEXT_COLOR),
                             ));
                         });
+                    #[cfg(not(target_arch = "wasm32"))]
                     parent
                         .spawn((
                             Button,
@@ -224,7 +215,7 @@ fn main_menu_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                             MenuButtonAction::Quit,
                         ))
                         .with_children(|parent| {
-                            let icon = asset_server.load("textures/Game Icons/exitRight.png");
+                            let icon = asset_server.load("textures/exitRight.png");
                             parent.spawn((ImageNode::new(icon), button_icon_node));
                             parent.spawn((
                                 Text::new("Quit"),
@@ -370,36 +361,4 @@ fn sound_settings_menu_setup(mut commands: Commands, volume: Res<Volume>) {
                         .with_child((Text::new("Back"), button_text_style));
                 });
         });
-}
-
-fn menu_action(
-    interaction_query: Query<
-        (&Interaction, &MenuButtonAction),
-        (Changed<Interaction>, With<Button>),
-    >,
-    mut app_exit_events: MessageWriter<AppExit>,
-    mut menu_state: ResMut<NextState<MenuState>>,
-    mut game_state: ResMut<NextState<AppState>>,
-) {
-    for (interaction, menu_button_action) in &interaction_query {
-        if *interaction == Interaction::Pressed {
-            match menu_button_action {
-                MenuButtonAction::Quit => {
-                    app_exit_events.write(AppExit::Success);
-                }
-                MenuButtonAction::Play => {
-                    game_state.set(AppState::Game);
-                    menu_state.set(MenuState::Disabled);
-                }
-                MenuButtonAction::Settings => menu_state.set(MenuState::Settings),
-                MenuButtonAction::SettingsSound => {
-                    menu_state.set(MenuState::SettingsSound);
-                }
-                MenuButtonAction::BackToMainMenu => menu_state.set(MenuState::Main),
-                MenuButtonAction::BackToSettings => {
-                    menu_state.set(MenuState::Settings);
-                }
-            }
-        }
-    }
 }

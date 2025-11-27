@@ -4,11 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.17" }
+bevy = { version = "0.17", features = ["webgl2", "trace"] }
 bevy_prototype_lyon = "0.15"
 rand = { version = "0.9" }
 rand_chacha = "0.9"
 getrandom = { version = "0.3", features = ["wasm_js"] }
+rstar = "0.12"
 
 [profile.dev]
 opt-level = 1

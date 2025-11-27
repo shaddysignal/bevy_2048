@@ -22,7 +22,7 @@ jobs:
           toolchain: stable
           override: true
           target: wasm32-unknown-unknown
-      - name: Install trunk
+      - name: Install trunkonly build when pull request
         run: |
           cargo install --locked trunk || true
       - name: Build with trunk
@@ -34,6 +34,7 @@ jobs:
           path: webbuild/
 
   deploy:
+    if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
     steps:
